@@ -22,7 +22,7 @@ label{font-size:12px;color:#666;display:block;margin:9px 0 5px}.grid{display:gri
 .check{height:42px;border-radius:10px;padding:0;background:#eee;color:#111}.check.done{background:#111;color:white}
 .stat{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.stat .card{margin:0}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:85px;background:#111;color:white;padding:10px 15px;border-radius:12px;display:none;z-index:9}
-.calendar{padding:12px}.weekdays,.days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.weekdays{text-align:center;color:#777;font-size:12px;margin-bottom:6px}.day{min-height:48px;padding:5px;background:#f1f1f3;color:#111;position:relative}.day span{display:block;font-size:9px;margin-top:2px}.hasWorkout{background:#111;color:#fff}.todayDay{outline:2px solid #777;outline-offset:1px}</style>
+.calendar{padding:12px}.weekdays,.days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.weekdays{text-align:center;color:#777;font-size:12px;margin-bottom:6px}.day{min-height:48px;padding:5px;background:#f1f1f3;color:#111;position:relative}.day span{display:block;font-size:9px;margin-top:1px}.hasWorkout{background:#111;color:#fff}.hasPlan{outline:2px solid #888;outline-offset:-2px}.todayDay{outline:2px solid #555;outline-offset:1px}.planBox{border-top:1px solid #eee;padding:12px 0}.planBox button{margin-top:8px}</style>
 </head>
 <body>
 <header><h1>Juan Training</h1><div class="sub">Tu entrenamiento. Tus datos. Tu progreso.</div></header>
@@ -30,15 +30,15 @@ label{font-size:12px;color:#666;display:block;margin:9px 0 5px}.grid{display:gri
 <nav class="tabs">
 <button data-tab="today">☀️<br>Hoy</button>
 <button data-tab="train">🏋️<br>Entrenar</button>
-<button data-tab="history">📅<br>Planificación</button>
+<button data-tab="history">🗓️<br>Historial</button>
 <button data-tab="progress">📈<br>Progreso</button>
 </nav>
 <div id="toast"></div>
 <script>
 const KEY="juan-training-web-v1";
 const defaults=["Sentadilla","Peso muerto","Press banca","Press militar","Dominadas","Remo con barra","Fondos","L-sit","Running","Bicicleta"];
-let db=JSON.parse(localStorage.getItem(KEY)||'null')||{exercises:defaults.map((name,i)=>({id:crypto.randomUUID(),name,category:i<2?"Piernas":i<4?"Empuje":i<7?"Tirón":i<8?"Core":"Cardio"})),workouts:[]};
-let calendarDate=null; let tab="today", current={title:"Entrenamiento",date:new Date().toISOString(),exercises:[]}, timer=null, remaining=0;
+let db=JSON.parse(localStorage.getItem(KEY)||'null')||{exercises:defaults.map((name,i)=>({id:crypto.randomUUID(),name,category:i<2?"Piernas":i<4?"Empuje":i<7?"Tirón":i<8?"Core":"Cardio"})),workouts:[],plans:[]};
+let calendarDate=null, planningDate=null, tab="today", current={title:"Entrenamiento",date:new Date().toISOString(),exercises:[]}, timer=null, remaining=0;
 function save(){localStorage.setItem(KEY,JSON.stringify(db))}
 function toast(t){let e=document.getElementById("toast");e.textContent=t;e.style.display="block";setTimeout(()=>e.style.display="none",1500)}
 function esc(s){return s.replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
@@ -58,7 +58,7 @@ function train(a){
 a.innerHTML=`<div class="card"><label>Nombre de la sesión</label><input id="title" value="${esc(current.title)}"></div>
 <div id="exercises">${current.exercises.map((x,i)=>exerciseHTML(x,i)).join("")}</div>
 <div class="card"><button class="secondary full" onclick="picker()">＋ Añadir ejercicio</button></div>
-<div class="card"><button class="full" onclick="finishWorkout()">GUARDAR ENTRENAMIENTO</button></div>
+<div class="card"><button class="full" onclick="finishWorkout()">${planningDate?"GUARDAR PLANIFICACIÓN":"GUARDAR ENTRENAMIENTO"}</button></div>
 <div class="card"><button class="secondary full" onclick="rest(120)">⏱ Iniciar descanso 2:00</button><div id="timer" class="big" style="text-align:center;margin-top:8px"></div></div>`;
 }
 function exerciseHTML(x,i){
@@ -76,11 +76,63 @@ function removeExercise(i){current.exercises.splice(i,1);render()}
 function addSet(i){current.exercises[i].sets.push({reps:8,weight:0,rpe:null,done:false});render()}
 function setVal(i,j,k,v){current.exercises[i].sets[j][k]=k==="rpe"?(v===""?null:Number(v)):Number(v)}
 function toggleSet(i,j){current.exercises[i].sets[j].done=!current.exercises[i].sets[j].done;render()}
-function finishWorkout(){current.title=document.getElementById("title").value||"Entrenamiento";current.date=new Date().toISOString();db.workouts.unshift(JSON.parse(JSON.stringify(current)));save();current={title:"Entrenamiento",date:new Date().toISOString(),exercises:[]};toast("Entrenamiento guardado");tab="history";setTimeout(render,400)}
-function history(a){const now=new Date();if(!window.calendarDate)window.calendarDate=new Date(now.getFullYear(),now.getMonth(),1);const y=calendarDate.getFullYear(),m=calendarDate.getMonth(),name=calendarDate.toLocaleDateString("es-ES",{month:"long",year:"numeric"}),offset=(new Date(y,m,1).getDay()+6)%7,days=new Date(y,m+1,0).getDate();let cells=[];for(let i=0;i<offset;i++)cells.push("<div></div>");for(let d=1;d<=days;d++){let key=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`,ws=db.workouts.filter(w=>w.date.slice(0,10)===key),today=new Date().toISOString().slice(0,10)===key;cells.push(`<button class="day ${today?"todayDay ":""}${ws.length?"hasWorkout":""}" onclick="dayDetail('${key}')"><b>${d}</b>${ws.length?"<span>●</span>":""}</button>`)}a.innerHTML=`<div class="card"><div class="row between"><button class="secondary" onclick="changeMonth(-1)">‹</button><h2 style="text-transform:capitalize;margin:0">${name}</h2><button class="secondary" onclick="changeMonth(1)">›</button></div></div><div class="card calendar"><div class="weekdays">${["L","M","X","J","V","S","D"].map(x=>`<b>${x}</b>`).join("")}</div><div class="days">${cells.join("")}</div></div><div id="dayPanel"></div><div class="card"><button class="full" onclick="planForDate('${new Date().toISOString().slice(0,10)}')">＋ Planificar entrenamiento</button></div>`}
-function changeMonth(d){calendarDate.setMonth(calendarDate.getMonth()+d);render()}
-function dayDetail(key){let ws=db.workouts.filter(w=>w.date.slice(0,10)===key),date=new Date(key+"T12:00:00"),p=document.getElementById("dayPanel");p.innerHTML=`<div class="card"><div class="row between"><div><div class="muted">${date.toLocaleDateString("es-ES",{weekday:"long"})}</div><h2 style="margin:4px 0">${date.toLocaleDateString("es-ES",{day:"numeric",month:"long"})}</h2></div><button class="secondary" onclick="planForDate('${key}')">＋ Añadir</button></div>${ws.length?ws.map(w=>`<details open style="margin-top:14px"><summary><b>✅ ${esc(w.title)}</b> · ${Math.round(vol(w))} kg</summary><div class="muted" style="margin-top:8px">${w.exercises.map(x=>`${esc(x.name)} (${x.sets.filter(s=>s.done).length} series)`).join(" · ")}</div></details>`).join(""):"<p class='muted'>No hay entrenamiento registrado este día.</p>"}</div>`}
-function planForDate(key){let [y,m,d]=key.split("-").map(Number);current={title:"Entrenamiento",date:new Date(y,m-1,d,12).toISOString(),exercises:[]};tab="train";render();toast("Fecha seleccionada")}
+function finishWorkout(){
+  current.title=document.getElementById("title").value||"Entrenamiento";
+  if(planningDate && !current.planId){
+    db.plans.push({id:crypto.randomUUID(),date:planningDate,title:current.title,exercises:JSON.parse(JSON.stringify(current.exercises))});
+    save(); toast("Planificación guardada");
+    planningDate=null; current={title:"Entrenamiento",date:new Date().toISOString(),exercises:[]};
+    tab="history"; setTimeout(render,400); return;
+  }
+  current.date=new Date().toISOString();
+  db.workouts.unshift(JSON.parse(JSON.stringify(current)));
+  if(current.planId){db.plans=db.plans.filter(p=>p.id!==current.planId)}
+  save(); toast("Entrenamiento guardado");
+  planningDate=null; current={title:"Entrenamiento",date:new Date().toISOString(),exercises:[]};
+  tab="history"; setTimeout(render,400);
+}
+function history(a){
+  if(!calendarDate) calendarDate=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+  const y=calendarDate.getFullYear(), m=calendarDate.getMonth();
+  const monthName=calendarDate.toLocaleDateString("es-ES",{month:"long",year:"numeric"});
+  const offset=(new Date(y,m,1).getDay()+6)%7, days=new Date(y,m+1,0).getDate();
+  let cells=[];
+  for(let i=0;i<offset;i++) cells.push("<div></div>");
+  for(let d=1;d<=days;d++){
+    const key=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    const done=db.workouts.filter(w=>w.date.slice(0,10)===key);
+    const planned=db.plans.filter(p=>p.date===key);
+    const today=new Date().toISOString().slice(0,10)===key;
+    cells.push(`<button class="day ${today?"todayDay ":""}${done.length?"hasWorkout ":""}${planned.length?"hasPlan":""}" onclick="dayDetail('${key}')"><b>${d}</b>${planned.length?'<span>□</span>':''}${done.length?'<span>✓</span>':''}</button>`);
+  }
+  a.innerHTML=`<div class="card"><div class="row between"><button class="secondary" onclick="changeMonth(-1)">‹</button><h2 style="text-transform:capitalize;margin:0">${monthName}</h2><button class="secondary" onclick="changeMonth(1)">›</button></div></div>
+  <div class="card calendar"><div class="weekdays">${["L","M","X","J","V","S","D"].map(x=>`<b>${x}</b>`).join("")}</div><div class="days">${cells.join("")}</div>
+  <p class="muted" style="font-size:12px;margin:12px 2px 0">□ Planificado · ✓ Realizado</p></div>
+  <div id="dayPanel"></div>`;
+}
+function changeMonth(delta){calendarDate.setMonth(calendarDate.getMonth()+delta);render()}
+function dayDetail(key){
+  const ws=db.workouts.filter(w=>w.date.slice(0,10)===key), ps=db.plans.filter(p=>p.date===key), date=new Date(key+"T12:00:00");
+  const panel=document.getElementById("dayPanel");
+  panel.innerHTML=`<div class="card"><div class="row between"><div><div class="muted">${date.toLocaleDateString("es-ES",{weekday:"long"})}</div><h2 style="margin:4px 0">${date.toLocaleDateString("es-ES",{day:"numeric",month:"long"})}</h2></div><button class="secondary" onclick="openPlanner('${key}')">＋ Añadir</button></div>
+  ${ps.map((p,i)=>`<div class="planBox"><b>□ ${esc(p.title)}</b><div class="muted">${p.exercises.length} ejercicios</div><button class="secondary" onclick="startPlanned(${i},'${key}')">Empezar</button> <button class="danger" onclick="deletePlan('${p.id}')">Eliminar</button></div>`).join("")}
+  ${ws.map(w=>`<div class="planBox"><b>✓ ${esc(w.title)}</b><div class="muted">${w.exercises.length} ejercicios · ${Math.round(vol(w))} kg</div><details><summary>Ver ejercicios</summary><p>${w.exercises.map(x=>esc(x.name)).join(" · ")}</p></details></div>`).join("")}
+  ${!ps.length&&!ws.length?`<p class="muted">No hay nada planificado ni realizado este día.</p>`:""}</div>`;
+}
+function openPlanner(key){
+  planningDate=key;
+  current={title:"Entrenamiento",date:key+"T12:00:00.000Z",exercises:[]};
+  tab="train"; render();
+  toast("Añade los ejercicios y guarda la planificación");
+}
+function startPlanned(index,key){
+  const p=db.plans.filter(x=>x.date===key)[index];
+  current=JSON.parse(JSON.stringify({title:p.title,date:new Date().toISOString(),exercises:p.exercises}));
+  current.planId=p.id; tab="train"; render();
+}
+function deletePlan(id){
+  if(confirm("¿Eliminar esta planificación?")){db.plans=db.plans.filter(p=>p.id!==id);save();render();toast("Planificación eliminada")}
+}
 function progress(a){
 let map={};db.workouts.forEach(w=>w.exercises.forEach(x=>x.sets.filter(s=>s.done).forEach(s=>{map[x.name]=Math.max(map[x.name]||0,s.weight)})));
 let rows=Object.entries(map).sort((a,b)=>b[1]-a[1]).map(([n,v])=>`<div class="row between card"><b>${esc(n)}</b><span>${v} kg</span></div>`).join("");
